@@ -1,0 +1,451 @@
+##############################
+# PATH Exports & Configuration
+##############################
+if [ -x "$(command -v colorls)" ]; then
+    alias ls="colorls"
+    alias la="colorls -al"
+fi
+
+# Pyenv
+eval "$(pyenv init --path)"
+
+## Kube Editor
+export KUBE_EDITOR='micro'
+
+## maven
+export PATH=$PATH:/opt/apache-maven/bin
+
+## Postgres
+export PATH="/usr/local/opt/postgresql@15/bin:$PATH"
+
+
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="/Users/charles.crickard/.rd/bin:$PATH"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+#########
+# Aliases
+#########
+# HELPERS
+alias home="cd ~"
+alias updir="cd '$OLDPWD'"
+alias clip="tr -d '\n' | pbcopy"
+alias zshconfig="micro ~/.zshrc"
+alias scratches="cd '~/Library/Application Support/JetBrains/IntelliJIdea2023.2/scratches'"
+alias dotfiles="/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME"
+
+# Application
+alias push="npm run test && npm run build && git push"
+alias scan="npm run test && npm run build"
+alias ngtest="ng test --watch"
+alias run_client="nvm use && npm i && npm start"
+alias run_server="source venv/bin/activate && pip3 install -r requirements.txt --upgrade && export GOOGLE_APPLICATION_CREDENTIALS=\"$PWD/kms_files/decrypted/dev_mip2_service_account.json\" && python3 main.py"
+alias server_install="pip install -r requirements.txt --upgrade"
+alias activate="source venv/bin/activate"
+alias re_npm="rm -rf node_modules/ && nvm use && npm i"
+alias pipuninstall='pip freeze | xargs pip uninstall -y'
+alias pipinstall='if test -f "requirements_local.txt"; then pipinstall "requirements_local.txt"; else pipinstall "requirements.txt"; fi'
+alias codebuild="./codebuild_build.sh -i aws/codebuild/standard:5.0 -b buildspec.yaml -a ./artifacts -c"
+
+# Terraform
+alias tf="terraform"
+alias tfi="terraform init"
+alias tftest="terraform init; terraform validate"
+
+# AWS
+alias awsreset="awsreset_fn > /dev/null 2>&1;"
+alias awsconfig="micro ~/.aws/config"
+alias awslogin="_awslogin master; _awslogin dev; _awslogin sit; _awslogin stage; _awslogin prod; _awslogin shared;"
+
+# MISC
+alias gurush="easy_ssh cloud_user $1"
+alias keycloak="docker run -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin -v keycloak-vol:/var/lib/docker/volumes/keycloak/_data quay.io/keycloak/keycloak:21.1.1 start-dev"
+
+# OVERWRITES
+alias g="git"
+alias k="kubectl"
+alias pip="pip3"
+alias kx="kubectx"
+
+# KUBECTL
+
+
+# JUST FOR FUN
+alias weather="curl http://wttr.in/"
+
+############################
+# Autocorrect "nocorrect" #
+###########################
+alias install="nocorrect template"
+
+#############
+# Functions #
+#############
+
+function killPort {
+    echo "Kill port $1"
+    pid=$(lsof -i:$1 -t);
+    echo $pid
+    kill -TERM $pid 2> /dev/null
+    kill -KILL $pid 2> /dev/null
+}
+
+function restartdeployment() {
+	kubectl scale deploy ${1}-deployment --replicas=0
+	kubectl scale deploy ${1}-deployment --replicas=1
+}
+
+function postgres-dev-client() {
+	export POSTGRES_PASSWORD=$(kubectl get secret --namespace default postgresdb-dev-postgresql -o jsonpath="{.data.postgres-password}" | base64 -d);
+	kubectl run postgresdb-dev-postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:15.2.0-debian-11-r16 --env="PGPASSWORD=$POSTGRES_PASSWORD" \
+	      --command -- psql --host postgresdb-dev-postgresql -U postgres -d krypti -p 5432
+}
+
+function awssbx () {
+	echo "Running in sbx"
+	aws ${@} --profile sbx
+}
+
+function gethost () {
+	HOST=$(kubectl get ingress/$1-ingress -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+	echo $HOST
+	echo $HOST | clip
+	echo "Coppied to clipboard"
+	
+}
+
+function kgpgrep () {
+	kubectl get pods | grep ^${1} | cut -d " " -f 1
+}
+
+function kgpgrep2 () {
+  local pods
+  pods=($(kubectl get pods | grep "^${1}" | awk '{print $1}'))
+  
+  if [ ${#pods[@]} -eq 0 ]; then
+    echo "No matching pods found."
+  elif [ ${#pods[@]} -eq 1 ]; then
+    echo "${pods[0]}"
+  else
+    echo "Multiple matching pods found:"
+    select pod in "${pods[@]}"; do
+      if [ -n "$pod" ]; then
+        echo "$pod"
+        break
+      else
+        echo "Invalid choice. Please select a valid number."
+      fi
+    done
+  fi
+}
+
+
+
+function klp () {
+  local pod_prefix="${1}"
+  local follow_flag=""
+
+  if [ "$2" = "--follow" ]; then
+    follow_flag="--follow"
+  fi
+
+  local pods=($(kubectl get pods | grep "^${pod_prefix}" | awk '{print $1}'))
+  
+  if [ ${#pods[@]} -eq 0 ]; then
+    echo "No matching pods found."
+    return 1
+  elif [ ${#pods[@]} -eq 1 ]; then
+    local pod="${pods[0]}"
+    kubectl logs $follow_flag "$pod"
+  else
+    PS3="Select a pod number (or q to quit):"$'\n'
+    select pod in "${pods[@]}"; do
+      if [ -n "$pod" ]; then
+        kubectl logs $follow_flag "$pod"
+        break
+      elif [ "$REPLY" = "q" ]; then
+        echo "Exiting..."
+        break
+      else
+        echo "Invalid choice. Please select a valid number or 'q' to quit."
+      fi
+    done
+  fi
+}
+
+
+function decode_k8s_secret {
+  if [ -z "$1" ]; then
+    echo "Please provide the secret name as an argument."
+    return 1
+  fi
+
+  local secret_data
+  secret_data=$(kubectl get secret "$1" -o jsonpath='{.data}')
+
+  if [ -z "$secret_data" ]; then
+    echo "Secret not found or no data available."
+    return 1
+  fi
+
+  local keys
+  keys=($(echo "$secret_data" | jq -r 'keys[]'))
+
+  if [ ${#keys[@]} -eq 0 ]; then
+    echo "No keys found in the secret data."
+    return 1
+  fi
+
+  echo "Select a key to decode:"
+  select key in "${keys[@]}"; do
+    if [ -n "$key" ]; then
+      local decoded_value
+      decoded_value=$(echo "$secret_data" | jq -r ".[\"$key\"]" | base64 -d)
+      echo "Decoded value for $key: $decoded_value"
+      break
+    else
+      echo "Invalid option. Please select a valid key."
+    fi
+  done
+}
+
+
+
+
+function pipinstall () {
+	pip install -r $1 --upgrade --no-cache
+}
+
+function pyinstall () {
+	major = echo $1 | awk 'BEGIN {FS="."}{print $1}'
+	minor = echo $1 | awk 'BEGIN {FS="."}{print $2}'
+	patch = echo $1 | awk 'BEGIN {FS="."}{print $3}'
+	echo $major
+	echo $minor
+	echo $patch
+	# a=${echo $1 | awk 'BEGIN {FS="."}'}
+	# pyenv install -l | grep -e '3.[0-9].[0-9]' | grep -v - | tail -1
+}
+
+dockerbash () {
+	echo "Starting exec for ${1}"
+	docker exec -it $1 /bin/bash
+}
+
+_awslogin () {
+	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi --profile "$@" >/dev/null
+}
+
+easy_ssh () {
+	echo "ssh ${1}@${2}"
+	expect -c "
+	spawn ssh ${1}@${2}
+	set timeout 5
+	expect {
+		\"int])?\" { send \"yes\r\"; exp_continue }
+	}
+	"
+	# echo "ssh ${1}@${2}"
+	# ssh ${1}@${2}
+}
+
+
+
+awslocal() {
+	profile='sbx'
+	while getopts 'p:' OPTION; do
+	  case "$OPTION" in
+	    p)
+	      profile="$OPTARG"
+	      echo "The value provided is $OPTARG"
+	      ;;
+	    ?)
+	      echo "script usage: $(basename \$0) [-l] [-h] [-a somevalue]" >&2
+	      exit 1
+	      ;;
+	  esac
+	done
+	shift "$(($OPTIND -1))"
+	
+	echo "aws $@ --region us-west-2 --profile $profile --endpoint-url 'http://localhost:4566'"
+	aws $@ --region us-west-2 --profile $profile --endpoint-url "http://localhost:4566"
+}
+
+awsd () {
+	profile='sbx'
+	while getopts 'p:' OPTION; do
+	  case "$OPTION" in
+	    p)
+	      profile="$OPTARG"
+	      echo "The value provided is $OPTARG"
+	      ;;
+	    ?)
+	      echo "script usage: $(basename \$0) [-l] [-h] [-a somevalue]" >&2
+	      exit 1
+	      ;;
+	  esac
+	done
+	shift "$(($OPTIND -1))"
+	
+	echo "aws ${@} --region us-west-2 --profile ${profile}"
+	aws $@ --region us-west-2 --profile $profile
+}
+
+awsreset_fn () {
+	# set -euo pipefail
+	# set -o verbose
+	
+	OPWD=$(pwd)
+
+	setopt extendedglob
+	cd ~/.aws
+
+	rm -rf ^(pip3|cli|config)
+
+	cd ${OPWD}
+}
+# function contextual-gcloud() {
+	# if [ -d .gcloudconfig/ ]; then
+# }
+
+function delinstance () {
+	echo "Please input the project id:"
+	read projectId
+	echo "Would you like this to be a dry run?\n1. Yes\n2. No"
+	echo "Enter Numerical Value for your choice"
+	read dryRun
+
+	if [ $dryRun = "1" ];
+	then
+		gcloud app instances list --project="$projectId" --format="json" | jq -r ".[] | [.id, .service, .version] | @tsv" <<< "$JSON" | while IFS=$'\t' read -r id service version; do echo gcloud app instances delete "$id" -s "$service" -v "$version" --quiet --project="$projectId"; done;
+	else
+		gcloud app instances list --project="$projectId" --format="json" | jq -r ".[] | [.id, .service, .version] | @tsv" <<< "$JSON" | while IFS=$'\t' read -r id service version; do gcloud app instances delete "$id" -s "$service" -v "$version" --quiet --project="$projectId"; done;
+	fi
+
+}
+
+# alias killport="!f() {  port=$(lsof -n -i4TCP:$1 | grep LISTEN | awk '{ print $2 }')  kill -9 $port }; f"
+########################
+# PowerLevel10k Config #
+########################
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+
+####################
+# Oh My ZSH Config #
+####################
+# If you come from bash you might have to change your $PATH.
+# export PATH=$HOME/bin:/usr/local/bin:$PATH
+
+# Path to your oh-my-zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+# Set name of the theme to load --- if set to "random", it will
+# load a random theme each time oh-my-zsh is loaded, in which case,
+# to know which specific one was loaded, run: echo $RANDOM_THEME
+# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
+ZSH_THEME="powerlevel10k/powerlevel10k"
+
+# Set list of themes to pick from when loading at random
+# Setting this variable when ZSH_THEME=random will cause zsh to load
+# a theme from this variable instead of looking in $ZSH/themes/
+# If set to an empty array, this variable will have no effect.
+# ZSH_THEME_RANDOM_CANDIDATES=( "robbyrussell" "agnoster" )
+
+# Uncomment the following line to use case-sensitive completion.
+# CASE_SENSITIVE="true"
+
+# Uncomment the following line to use hyphen-insensitive completion.
+# Case-sensitive completion must be off. _ and - will be interchangeable.
+# HYPHEN_INSENSITIVE="true"
+
+# Uncomment one of the following lines to change the auto-update behavior
+# zstyle ':omz:update' mode disabled  # disable automatic updates
+# zstyle ':omz:update' mode auto      # update automatically without asking
+# zstyle ':omz:update' mode reminder  # just remind me to update when it's time
+
+# Uncomment the following line to change how often to auto-update (in days).
+# zstyle ':omz:update' frequency 13
+
+# Uncomment the following line if pasting URLs and other text is messed up.
+# DISABLE_MAGIC_FUNCTIONS="true"
+
+# Uncomment the following line to disable colors in ls.
+# DISABLE_LS_COLORS="true"
+
+# Uncomment the following line to disable auto-setting terminal title.
+# DISABLE_AUTO_TITLE="true"
+
+# Uncomment the following line to enable command auto-correction.
+ENABLE_CORRECTION="true"
+
+# Uncomment the following line to display red dots whilst waiting for completion.
+# You can also set it to another string to have that shown instead of the default red dots.
+# e.g. COMPLETION_WAITING_DOTS="%F{yellow}waiting...%f"
+# Caution: this setting can cause issues with multiline prompts in zsh < 5.7.1 (see #5765)
+COMPLETION_WAITING_DOTS="true"
+
+# Uncomment the following line if you want to disable marking untracked files
+# under VCS as dirty. This makes repository status check for large repositories
+# much, much faster.
+# DISABLE_UNTRACKED_FILES_DIRTY="true"
+
+# Uncomment the following line if you want to change the command execution time
+# stamp shown in the history command output.
+# You can set one of the optional three formats:
+# "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
+# or set a custom format using the strftime function format specifications,
+# see 'man strftime' for details.
+# HIST_STAMPS="mm/dd/yyyy"
+
+# Would you like to use another custom folder than $ZSH/custom?
+# ZSH_CUSTOM=/path/to/new-custom-folder
+
+# Which plugins would you like to load?
+# Standard plugins can be found in $ZSH/plugins/
+# Custom plugins may be added to $ZSH_CUSTOM/plugins/
+# Example format: plugins=(rails git textmate ruby lighthouse)
+# Add wisely, as too many plugins slow down shell startup.
+plugins=(git zsh-syntax-highlighting zsh-autosuggestions history npm aws terraform)
+
+source $ZSH/oh-my-zsh.sh
+# source $(dirname $(gem which colorls >/dev/null))/tab_complete.sh
+
+# User configuration
+
+# export MANPATH="/usr/local/man:$MANPATH"
+
+# You may need to manually set your language environment
+# export LANG=en_US.UTF-8
+
+# Preferred editor for local and remote sessions
+if [[ -n $SSH_CONNECTION ]]; then
+	export EDITOR='micro'
+else
+ 	export EDITOR='micro'
+fi
+
+# Compilation flags
+# export ARCHFLAGS="-arch x86_64"
+
+# Set personal aliases, overriding those provided by oh-my-zsh libs,
+# plugins, and themes. Aliases can be placed here, though oh-my-zsh
+# users are encouraged to define aliases within the ZSH_CUSTOM folder.
+# For a full list of active aliases, run `alias`.
+#
+# Example aliases
+# alias zshconfig="mate ~/.zshrc"
+# alias ohmyzsh="mate ~/.oh-my-zsh"
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
