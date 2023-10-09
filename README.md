@@ -17,6 +17,7 @@ Lots of cool stuff in there. Full disclosure, I don't always use all of these, b
 - ec
 ### Sources
 [Original Aliases Article](https://haacked.com/archive/2014/07/28/github-flow-aliases/)
+
 [Full List of Aliases from Haacked](https://github.com/haacked/dotfiles/blob/main/git/gitconfig.aliases.symlink)
 
 ## .p10k.zsh
