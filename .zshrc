@@ -29,6 +29,333 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 
+#########
+# Aliases
+#########
+# HELPERS
+alias home="cd ~"
+alias updir="cd '$OLDPWD'"
+alias clip="tr -d '\n' | pbcopy"
+alias zshconfig="micro ~/.zshrc"
+alias zshalias="micro $ZSH/custom/aliases.zsh"
+alias zshfunctions="micro $ZSH/custom/functions.zsh"
+alias scratches="cd '~/Library/Application Support/JetBrains/IntelliJIdea2023.2/scratches'"
+alias dotfiles="/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME"
+alias prettyjson='python -m json.tool'
+
+# Application
+alias push="npm run test && npm run build && git push"
+alias scan="npm run test && npm run build"
+alias ngtest="ng test --watch"
+alias run_client="nvm use && npm i && npm start"
+alias run_server="source venv/bin/activate && pip3 install -r requirements.txt --upgrade && export GOOGLE_APPLICATION_CREDENTIALS=\"$PWD/kms_files/decrypted/dev_mip2_service_account.json\" && python3 main.py"
+alias server_install="pip install -r requirements.txt --upgrade"
+alias activate="source venv/bin/activate"
+alias re_npm="rm -rf node_modules/ && nvm use && npm i"
+alias pipuninstall='pip freeze | xargs pip uninstall -y'
+alias pipinstall='if test -f "requirements_local.txt"; then pipinstall "requirements_local.txt"; else pipinstall "requirements.txt"; fi'
+alias codebuild="./codebuild_build.sh -i aws/codebuild/standard:5.0 -b buildspec.yaml -a ./artifacts -c"
+
+# Terraform
+alias tf="terraform"
+alias tfi="terraform init"
+alias tftest="terraform init; terraform validate"
+
+# AWS
+alias awsreset="awsreset_fn > /dev/null 2>&1;"
+alias awsconfig="micro ~/.aws/config"
+alias awslogin="_awslogin master; _awslogin dev; _awslogin sit; _awslogin stage; _awslogin prod; _awslogin shared;"
+
+# MISC
+alias gurush="easy_ssh cloud_user $1"
+alias keycloak="docker run -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin -v keycloak-vol:/var/lib/docker/volumes/keycloak/_data quay.io/keycloak/keycloak:21.1.1 start-dev"
+
+# OVERWRITES
+alias g="git"
+alias k="kubectl"
+alias pip="pip3"
+alias kx="kubectx"
+
+# KUBECTL
+
+
+# JUST FOR FUN
+alias weather="curl http://wttr.in/"
+
+
+#############
+# Functions #
+#############
+
+
+#### Helpers
+
+function killPort {
+    echo "Kill port $1"
+    pid=$(lsof -i:$1 -t);
+    echo $pid
+    kill -TERM $pid 2> /dev/null
+    kill -KILL $pid 2> /dev/null
+}
+
+function postgres-dev-client() {
+	export POSTGRES_PASSWORD=$(kubectl get secret --namespace default postgresdb-dev-postgresql -o jsonpath="{.data.postgres-password}" | base64 -d);
+	kubectl run postgresdb-dev-postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:15.2.0-debian-11-r16 --env="PGPASSWORD=$POSTGRES_PASSWORD" \
+	      --command -- psql --host postgresdb-dev-postgresql -U postgres -d krypti -p 5432
+}
+
+
+#### Kubernes
+# Gets the host of a named ingress
+function gethost () {
+	HOST=$(kubectl get ingress/$1 -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+	echo $HOST
+	echo $HOST | clip
+	echo "Coppied to clipboard"
+	
+}
+function kgpgrep () {
+	kubectl get pods | grep ^${1} | cut -d " " -f 1
+}
+function kgp {
+    local pod_name=$1
+    if [ -z "$pod_name" ]; then
+        kubectl get pods
+        return 1
+    fi
+
+    local pods
+    pods=$(kubectl get pods --no-headers -o custom-columns=":metadata.name" | grep -i "$pod_name")
+	
+    if [ -z "$pods" ]; then
+        echo "No matching pods found."
+        return 1
+    fi
+
+    echo "$pods"
+}
+function klp {
+    local pod_name="$1"
+    echo "Getting pods matching ${pod_name}"
+
+    if [ -z "$pod_name" ]; then
+        echo "Please provide a pod name or part of it as an argument."
+        return 1
+    fi
+
+    local matching_pods
+    matching_pods=($(kgp "$pod_name"))
+
+    if [ "${#matching_pods[*]}" -eq 0 ]; then
+        echo "No matching pods found."
+        return 1
+    fi
+
+    if [ "${#matching_pods[*]}" -eq 1 ]; then
+        kubectl logs "${matching_pods}"
+        return 0
+    fi
+
+    echo "Multiple pods found. Please select a pod:"
+    local i=0
+    local pod_info
+    local options=()
+
+    for pod in "${matching_pods[@]}"; do
+        # Fetch and store pod info
+        pod_info=$(kubectl get pods "$pod" -o jsonpath='{.metadata.name}{"\t"}{range .status.containerStatuses[*]}{.ready}{"\t"}{.restartCount}{"\t"}{.image}{"\n"}{end}' 2>/dev/null)
+        
+        # Append the pod_info to the options array
+        options+=("$pod_info")
+        
+        # Increment the counter
+        ((i++))
+        
+        # Print the current pod_info
+        echo "$i) $pod_info"
+    done
+
+    local selected_pod
+    while true; do
+        echo "Enter the number of the pod (1-${#matching_pods[*]}): "
+        read selected_pod
+        if [[ "$selected_pod" =~ ^[0-9]+$ ]] && [ "$selected_pod" -ge 1 ] && [ "$selected_pod" -le "${#matching_pods[*]}" ]; then
+            break
+        else
+            echo "Invalid selection. Please enter a valid number."
+        fi
+    done
+
+    # Retrieve and display the logs for the selected pod
+    kubectl logs "${matching_pods[$((selected_pod-1))]}"
+}
+
+
+function decode_k8s_secret {
+  if [ -z "$1" ]; then
+    echo "Please provide the secret name as an argument."
+    return 1
+  fi
+
+  local secret_data
+  secret_data=$(kubectl get secret "$1" -o jsonpath='{.data}')
+
+  if [ -z "$secret_data" ]; then
+    echo "Secret not found or no data available."
+    return 1
+  fi
+
+  local keys
+  keys=($(echo "$secret_data" | jq -r 'keys[]'))
+
+  if [ ${#keys[@]} -eq 0 ]; then
+    echo "No keys found in the secret data."
+    return 1
+  fi
+
+  echo "Select a key to decode:"
+  select key in "${keys[@]}"; do
+    if [ -n "$key" ]; then
+      local decoded_value
+      decoded_value=$(echo "$secret_data" | jq -r ".[\"$key\"]" | base64 -d)
+      echo "Decoded value for $key: $decoded_value"
+      break
+    else
+      echo "Invalid option. Please select a valid key."
+    fi
+  done
+}
+
+function restartdeployment() {
+	kubectl scale deploy ${1}-deployment --replicas=0
+	kubectl scale deploy ${1}-deployment --replicas=1
+}
+
+
+
+
+function awssbx () {
+	echo "Running in sbx"
+	aws ${@} --profile sbx
+}
+
+function decodeAwsMessage() {
+	aws --profile=$2 sts decode-authorization-message --encoded-message $1
+}
+
+
+function pipinstall () {
+	pip install -r $1 --upgrade --no-cache
+}
+
+function pyinstall () {
+	major = echo $1 | awk 'BEGIN {FS="."}{print $1}'
+	minor = echo $1 | awk 'BEGIN {FS="."}{print $2}'
+	patch = echo $1 | awk 'BEGIN {FS="."}{print $3}'
+	echo $major
+	echo $minor
+	echo $patch
+	# a=${echo $1 | awk 'BEGIN {FS="."}'}
+	# pyenv install -l | grep -e '3.[0-9].[0-9]' | grep -v - | tail -1
+}
+
+dockerbash () {
+	echo "Starting exec for ${1}"
+	docker exec -it $1 /bin/bash
+}
+
+_awslogin () {
+	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi --profile "$@" >/dev/null
+}
+
+easy_ssh () {
+	echo "ssh ${1}@${2}"
+	expect -c "
+	spawn ssh ${1}@${2}
+	set timeout 5
+	expect {
+		\"int])?\" { send \"yes\r\"; exp_continue }
+	}
+	"
+	# echo "ssh ${1}@${2}"
+	# ssh ${1}@${2}
+}
+
+
+
+awslocal() {
+	profile='sbx'
+	while getopts 'p:' OPTION; do
+	  case "$OPTION" in
+	    p)
+	      profile="$OPTARG"
+	      echo "The value provided is $OPTARG"
+	      ;;
+	    ?)
+	      echo "script usage: $(basename \$0) [-l] [-h] [-a somevalue]" >&2
+	      exit 1
+	      ;;
+	  esac
+	done
+	shift "$(($OPTIND -1))"
+	
+	echo "aws $@ --region us-west-2 --profile $profile --endpoint-url 'http://localhost:4566'"
+	aws $@ --region us-west-2 --profile $profile --endpoint-url "http://localhost:4566"
+}
+
+awsd () {
+	profile='sbx'
+	while getopts 'p:' OPTION; do
+	  case "$OPTION" in
+	    p)
+	      profile="$OPTARG"
+	      echo "The value provided is $OPTARG"
+	      ;;
+	    ?)
+	      echo "script usage: $(basename \$0) [-l] [-h] [-a somevalue]" >&2
+	      exit 1
+	      ;;
+	  esac
+	done
+	shift "$(($OPTIND -1))"
+	
+	echo "aws ${@} --region us-west-2 --profile ${profile}"
+	aws $@ --region us-west-2 --profile $profile
+}
+
+awsreset_fn () {
+	# set -euo pipefail
+	# set -o verbose
+	
+	OPWD=$(pwd)
+
+	setopt extendedglob
+	cd ~/.aws
+
+	rm -rf ^(pip3|cli|config)
+
+	cd ${OPWD}
+}
+# function contextual-gcloud() {
+	# if [ -d .gcloudconfig/ ]; then
+# }
+
+function delinstance () {
+	echo "Please input the project id:"
+	read projectId
+	echo "Would you like this to be a dry run?\n1. Yes\n2. No"
+	echo "Enter Numerical Value for your choice"
+	read dryRun
+
+	if [ $dryRun = "1" ];
+	then
+		gcloud app instances list --project="$projectId" --format="json" | jq -r ".[] | [.id, .service, .version] | @tsv" <<< "$JSON" | while IFS=$'\t' read -r id service version; do echo gcloud app instances delete "$id" -s "$service" -v "$version" --quiet --project="$projectId"; done;
+	else
+		gcloud app instances list --project="$projectId" --format="json" | jq -r ".[] | [.id, .service, .version] | @tsv" <<< "$JSON" | while IFS=$'\t' read -r id service version; do gcloud app instances delete "$id" -s "$service" -v "$version" --quiet --project="$projectId"; done;
+	fi
+
+}
+
 
 ############################
 # Autocorrect "nocorrect" #
