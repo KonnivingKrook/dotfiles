@@ -285,8 +285,7 @@ dockerbash () {
 }
 
 _awslogin () {
-	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi --profile "$@" >/dev/null
-	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --no-ssl-verification --session-duration 14400 --no-sspi
+	PYTHONWARNINGS="ignore" aws-adfs login --profile=$@ --adfs-host=adfs.wgu.edu --no-ssl-verification --session-duration 14400 --no-sspi
 }
 
 easy_ssh () {
