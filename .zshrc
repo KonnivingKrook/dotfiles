@@ -134,9 +134,20 @@ function kgp {
 
     echo "$pods"
 }
+
+
 function klp {
+    local follow=false
+    
     local pod_name="$1"
-    echo "Getting pods matching ${pod_name}"
+    echo "Looking for pods matching ${pod_name}"
+
+    # Check if the first argument is "--follow"
+   if [ "$1" = "--follow" ] || [ "$1" = "-f" ]; then
+   		echo "Following the logs"
+        follow=true
+        shift
+    fi
 
     if [ -z "$pod_name" ]; then
         echo "Please provide a pod name or part of it as an argument."
@@ -152,7 +163,11 @@ function klp {
     fi
 
     if [ "${#matching_pods[*]}" -eq 1 ]; then
-        kubectl logs "${matching_pods}"
+        if [ "$follow" = true ]; then
+            kubectl logs -f "${matching_pods}"
+        else
+            kubectl logs "${matching_pods}"
+        fi
         return 0
     fi
 
@@ -187,8 +202,13 @@ function klp {
     done
 
     # Retrieve and display the logs for the selected pod
-    kubectl logs "${matching_pods[$((selected_pod-1))]}"
+    if [ "$follow" = true ]; then
+        kubectl logs -f "${matching_pods[$((selected_pod-1))]}"
+    else
+        kubectl logs "${matching_pods[$((selected_pod-1))]}"
+    fi
 }
+
 
 
 function decode_k8s_secret {
@@ -266,6 +286,7 @@ dockerbash () {
 
 _awslogin () {
 	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi --profile "$@" >/dev/null
+	PYTHONWARNINGS="ignore" aws-adfs login --adfs-host=adfs.wgu.edu --no-ssl-verification --session-duration 14400 --no-sspi
 }
 
 easy_ssh () {
@@ -323,7 +344,7 @@ awsd () {
 	aws $@ --region us-west-2 --profile $profile
 }
 
-awsreset_fn () {
+function awsreset_fn () {
 	# set -euo pipefail
 	# set -o verbose
 	
@@ -339,6 +360,18 @@ awsreset_fn () {
 # function contextual-gcloud() {
 	# if [ -d .gcloudconfig/ ]; then
 # }
+
+function update_awslogin() {
+	# Clone Command. Replaced with git pull
+	git clone git@github.com:WGU-edu/SecOps-AWS-CLI.git
+	git pull
+	cd SecOps-AWS-CLI
+	pip uninstall aws-adfs --yes --quiet
+	pip install aws-adfs 
+	awsreset_fn
+	rm -rf SecOps-AWS-CLI
+	
+}
 
 function delinstance () {
 	echo "Please input the project id:"
