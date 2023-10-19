@@ -247,8 +247,8 @@ function decode_k8s_secret {
 }
 
 function restartdeployment() {
-	kubectl scale deploy ${1}-deployment --replicas=0
-	kubectl scale deploy ${1}-deployment --replicas=1
+	kubectl scale deploy ${1} --replicas=0
+	kubectl scale deploy ${1} --replicas=1
 }
 
 
@@ -387,6 +387,42 @@ function delinstance () {
 	fi
 
 }
+
+function genDockerConfig() {
+    # Docker registry URL (replace with your actual URL)
+    registry_url="nexus.shared.wgu.edu:9443"
+
+    # Prompt the user for their username
+    echo -n "Enter your Docker username: "
+    read username
+
+    # Prompt the user for their password (and hide the input)
+    echo -n "Enter your Docker password: "
+    read -s password
+    echo
+
+    # Encode the username and password in Base64
+    auth_base64=$(echo -n "$username:$password" | base64)
+
+    # Create the Docker config JSON
+    docker_config="{\"auths\":{\"$registry_url\":{\"username\":\"$username\",\"password\":\"$password\",\"auth\":\"$auth_base64\"}}}"
+
+    # Save the Docker config JSON to a file
+    echo $docker_config > ~/dockerconfig.json
+
+    echo "Docker config JSON file created and saved to ~/dockerconfig.json."
+
+    # Create a Kubernetes secret
+    kubectl create secret generic --dry-run=client my-registry-secret \
+        --from-file=.dockerconfigjson=dockerconfig.json \
+        --type=kubernetes.io/dockerconfigjson -o yaml > secret.yaml
+
+    echo "Docker config secret saved to secret.yaml\n"
+
+    echo "To update the secret to the cluster, please run the following command:"
+    echo "kubectl apply -f secret.yaml"
+}
+
 
 
 ############################
