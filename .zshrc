@@ -32,18 +32,28 @@ export NVM_DIR="$HOME/.nvm"
 #########
 # Aliases
 #########
+# OVERRIDES
+alias g="git"
+alias k="kubectl"
+alias pip="pip3"
+alias kx="kubectx"
+alias tf="terraform"
+
 # HELPERS
 alias home="cd ~"
 alias updir="cd '$OLDPWD'"
 alias clip="tr -d '\n' | pbcopy"
-alias zshconfig="micro ~/.zshrc"
-alias zshalias="micro $ZSH/custom/aliases.zsh"
-alias zshfunctions="micro $ZSH/custom/functions.zsh"
 alias scratches="cd '~/Library/Application Support/JetBrains/IntelliJIdea2023.2/scratches'"
 alias dotfiles="/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME"
 alias prettyjson='python -m json.tool'
 
-# Application
+# CONFIG FILES DIRECT
+alias zshconfig="micro ~/.zshrc"
+alias awsconfig="micro ~/.aws/config"
+# alias zshalias="micro $ZSH/custom/aliases.zsh"
+# alias zshfunctions="micro $ZSH/custom/functions.zsh"
+
+# APPLICATION DEVELOPMENT
 alias push="npm run test && npm run build && git push"
 alias scan="npm run test && npm run build"
 alias ngtest="ng test --watch"
@@ -56,28 +66,16 @@ alias pipuninstall='pip freeze | xargs pip uninstall -y'
 alias pipinstall='if test -f "requirements_local.txt"; then pipinstall "requirements_local.txt"; else pipinstall "requirements.txt"; fi'
 alias codebuild="./codebuild_build.sh -i aws/codebuild/standard:5.0 -b buildspec.yaml -a ./artifacts -c"
 
-# Terraform
-alias tf="terraform"
+# TERRAFORM
 alias tfi="terraform init"
 alias tftest="terraform init; terraform validate"
 
 # AWS
-alias awsreset="awsreset_fn > /dev/null 2>&1;"
-alias awsconfig="micro ~/.aws/config"
 alias awslogin="_awslogin master; _awslogin dev; _awslogin sit; _awslogin stage; _awslogin prod; _awslogin shared;"
 
 # MISC
 alias gurush="easy_ssh cloud_user $1"
 alias keycloak="docker run -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin -v keycloak-vol:/var/lib/docker/volumes/keycloak/_data quay.io/keycloak/keycloak:21.1.1 start-dev"
-
-# OVERWRITES
-alias g="git"
-alias k="kubectl"
-alias pip="pip3"
-alias kx="kubectx"
-
-# KUBECTL
-
 
 # JUST FOR FUN
 alias weather="curl http://wttr.in/"
@@ -87,10 +85,8 @@ alias weather="curl http://wttr.in/"
 # Functions #
 #############
 
-
 #### Helpers
-
-function killPort {
+function killport {
     echo "Kill port $1"
     pid=$(lsof -i:$1 -t);
     echo $pid
@@ -98,14 +94,41 @@ function killPort {
     kill -KILL $pid 2> /dev/null
 }
 
+# Runs postgress locally against minikube
 function postgres-dev-client() {
+	kubectx minikube
 	export POSTGRES_PASSWORD=$(kubectl get secret --namespace default postgresdb-dev-postgresql -o jsonpath="{.data.postgres-password}" | base64 -d);
 	kubectl run postgresdb-dev-postgresql-client --rm --tty -i --restart='Never' --namespace default --image docker.io/bitnami/postgresql:15.2.0-debian-11-r16 --env="PGPASSWORD=$POSTGRES_PASSWORD" \
 	      --command -- psql --host postgresdb-dev-postgresql -U postgres -d krypti -p 5432
 }
 
+# TODO: Move to a docker compose
+function keycloak-dev () {
+	docker run -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin -v keycloak-vol:/var/lib/docker/volumes/keycloak/_data quay.io/keycloak/keycloak:21.1.1 start-dev
+
+}
+
 
 #### Kubernes
+# Sets current namespace
+function kns() {
+    kubectl config set-context --current --namespace="$1"
+}
+
+# Describes a pod
+function kdp() {
+    local pod_name
+    while read -r pod_name; do
+        kubectl describe pod "$pod_name"
+    done
+}
+
+# executes inside a kubernetes pod that matches the input
+function kpsh () {
+	echo "Starting exec for ${1}"
+	kubectl exec --stdin --tty $1 -- /bin/sh  	
+}
+
 # Gets the host of a named ingress
 function gethost () {
 	HOST=$(kubectl get ingress/$1 -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
@@ -114,9 +137,8 @@ function gethost () {
 	echo "Coppied to clipboard"
 	
 }
-function kgpgrep () {
-	kubectl get pods | grep ^${1} | cut -d " " -f 1
-}
+
+# runs kubectl get pods. Can optionally pass a filter to look for a specific pod or list of pods that match
 function kgp {
     local pod_name=$1
     if [ -z "$pod_name" ]; then
@@ -143,8 +165,8 @@ function klp {
     echo "Looking for pods matching ${pod_name}"
 
     # Check if the first argument is "--follow"
-   if [ "$1" = "--follow" ] || [ "$1" = "-f" ]; then
-   		echo "Following the logs"
+    if [ "$1" = "--follow" ] || [ "$1" = "-f" ]; then
+        echo "Following the logs"
         follow=true
         shift
     fi
@@ -157,8 +179,10 @@ function klp {
     local matching_pods
     matching_pods=($(kgp "$pod_name"))
 
+    echo $matching_pods
+
     if [ "${#matching_pods[*]}" -eq 0 ]; then
-        echo "No matching pods found."
+    	echo "No matching pods found."
         return 1
     fi
 
@@ -176,19 +200,31 @@ function klp {
     local pod_info
     local options=()
 
-    for pod in "${matching_pods[@]}"; do
-        # Fetch and store pod info
-        pod_info=$(kubectl get pods "$pod" -o jsonpath='{.metadata.name}{"\t"}{range .status.containerStatuses[*]}{.ready}{"\t"}{.restartCount}{"\t"}{.image}{"\n"}{end}' 2>/dev/null)
-        
-        # Append the pod_info to the options array
-        options+=("$pod_info")
-        
-        # Increment the counter
-        ((i++))
-        
-        # Print the current pod_info
-        echo "$i) $pod_info"
-    done
+    # Fetch information for all matching pods in one command
+    local pod_info_all
+    pod_info_all=$(kubectl get pods "${matching_pods[@]}" -o custom-columns="NAME:.metadata.name,READY:.status.containerStatuses[*].ready,RESTARTS:.status.containerStatuses[*].restartCount,IMAGE:.status.containerStatuses[*].image" 2>/dev/null)
+
+    if [ -n "$pod_info_all" ]; then
+        while read -r line; do
+            # Extract the full image name
+            full_image_name=$(echo "$line" | awk '{print $4}')
+            
+            # Extract and format the image name (name:tag)
+            image_name_and_tag=$(echo "$full_image_name" | awk -F'/' '{print $NF}')
+            
+            # Replace the full image name with the formatted name and tag
+            line=$(echo "$line" | sed "s|$full_image_name|$image_name_and_tag|")
+            
+            # Append the pod_info to the options array
+            options+=("$line")
+
+            # Increment the counter
+            ((i++))
+
+            # Print the current pod_info
+            echo "$i) $line"
+        done <<< "$pod_info_all"
+    fi
 
     local selected_pod
     while true; do
@@ -211,6 +247,7 @@ function klp {
 
 
 
+# Interactively decodes a kubernetes secret that matches the input
 function decode_k8s_secret {
   if [ -z "$1" ]; then
     echo "Please provide the secret name as an argument."
@@ -247,39 +284,36 @@ function decode_k8s_secret {
 }
 
 function restartdeployment() {
-	kubectl scale deploy ${1} --replicas=0
-	kubectl scale deploy ${1} --replicas=1
-}
+    local deployment_name="$1"
+    local replicas="${2:1}"  # Use the second argument or default to 1 if not provided
 
-
-
-
-function awssbx () {
-	echo "Running in sbx"
-	aws ${@} --profile sbx
+    kubectl scale deploy "$deployment_name" --replicas=0
+    kubectl scale deploy "$deployment_name" --replicas="$replicas"
 }
 
 function decodeAwsMessage() {
 	aws --profile=$2 sts decode-authorization-message --encoded-message $1
 }
 
-
-function pipinstall () {
-	pip install -r $1 --upgrade --no-cache
+# Installs a python version matching the format x.y.z
+function pyinstall() {
+    local version="$1"
+    if [[ "$version" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        major="${BASH_REMATCH[1]}"
+        minor="${BASH_REMATCH[2]}"
+        patch="${BASH_REMATCH[3]}"
+        echo "Major version: $major"
+        echo "Minor version: $minor"
+        echo "Patch version: $patch"
+        # a=${echo $1 | awk 'BEGIN {FS="."}'}
+       	# pyenv install -l | grep -e '3.[0-9].[0-9]' | grep -v - | tail -1
+    else
+        echo "Invalid version format: $version. Please provide a version in the format X.Y.Z."
+    fi
 }
 
-function pyinstall () {
-	major = echo $1 | awk 'BEGIN {FS="."}{print $1}'
-	minor = echo $1 | awk 'BEGIN {FS="."}{print $2}'
-	patch = echo $1 | awk 'BEGIN {FS="."}{print $3}'
-	echo $major
-	echo $minor
-	echo $patch
-	# a=${echo $1 | awk 'BEGIN {FS="."}'}
-	# pyenv install -l | grep -e '3.[0-9].[0-9]' | grep -v - | tail -1
-}
-
-dockerbash () {
+# execs into a docker container that matches the input
+function dockerexec () {
 	echo "Starting exec for ${1}"
 	docker exec -it $1 /bin/bash
 }
@@ -300,8 +334,6 @@ easy_ssh () {
 	# echo "ssh ${1}@${2}"
 	# ssh ${1}@${2}
 }
-
-
 
 awslocal() {
 	profile='sbx'
@@ -343,9 +375,7 @@ awsd () {
 	aws $@ --region us-west-2 --profile $profile
 }
 
-function awsreset_fn () {
-	# set -euo pipefail
-	# set -o verbose
+function awsreset () {
 	
 	OPWD=$(pwd)
 
@@ -356,9 +386,7 @@ function awsreset_fn () {
 
 	cd ${OPWD}
 }
-# function contextual-gcloud() {
-	# if [ -d .gcloudconfig/ ]; then
-# }
+
 
 function update_awslogin() {
 	# Clone Command. Replaced with git pull
@@ -393,11 +421,11 @@ function genDockerConfig() {
     registry_url="nexus.shared.wgu.edu:9443"
 
     # Prompt the user for their username
-    echo -n "Enter your Docker username: "
+    echo -n "Enter the Docker username: "
     read username
 
     # Prompt the user for their password (and hide the input)
-    echo -n "Enter your Docker password: "
+    echo -n "Enter the Docker password: "
     read -s password
     echo
 
