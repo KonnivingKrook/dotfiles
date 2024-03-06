@@ -1,8 +1,0 @@
-# Ignore system files
-.DS_Store
-
-# Ignore editor temporary files
-*~
-
-# Ignore specific directories
-/temp/
