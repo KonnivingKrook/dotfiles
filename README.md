@@ -73,6 +73,3 @@ Lots of cool stuff in there. Full disclosure, I don't always use all of these, b
 
 ## .p10k.zsh
 My .p10k zsh theme configuration
-
-## .aws/config
-My aws config
