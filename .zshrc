@@ -1,14 +1,17 @@
-
+# Kiro CLI pre block. Keep at the top of this file.
+[[ -f "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.pre.zsh" ]] && builtin source "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.pre.zsh"
 ##############################
 # PATH Exports & Configuration
 ##############################
+## Micro True Color
+export MICRO_TRUECOLOR=1
 if [ -x "$(command -v colorls)" ]; then
     alias ls="colorls"
     alias la="colorls -al"
 fi
 
-# Pyenv
-eval "$(pyenv init --path)"
+## Pyenv
+# eval "$(pyenv init --path)"
 
 ## Kube Editor
 export KUBE_EDITOR='micro'
@@ -18,6 +21,8 @@ export PATH=$PATH:/opt/apache-maven/bin
 
 ## Postgres
 export PATH="/usr/local/opt/postgresql@15/bin:$PATH"
+
+export PATH="/Users/charles.crickard/Desktop/playground/scripts:$PATH"
 
 
 
@@ -30,7 +35,16 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 
 # Load Angular CLI autocompletion.
-source <(ng completion script)
+# source <(ng completion script)
+
+source ~/Desktop/playground/scripts/awsScriptsUpdated.sh
+source ~/Desktop/playground/scripts/scratch.sh
+source ~/Desktop/playground/scripts/playgroundScripts.sh
+# source ~/Desktop/playground/scripts/prlist.sh
+# source ~/Desktop/playground/scripts/fkdynatrace.sh
+
+# Kraken Scripts
+source ~/PycharmProjects/kraken/tools/spinnaker/install/halyard/halyard_scripts.sh > /dev/null 2>&1
 
 
 #########
@@ -45,6 +59,7 @@ alias tf="terraform"
 
 # HELPERS
 alias home="cd ~"
+alias playground="cd ~/Desktop/playground"
 alias updir="cd '$OLDPWD'"
 alias clip="tr -d '\n' | pbcopy"
 alias scratches="cd '~/Library/Application Support/JetBrains/IntelliJIdea2023.2/scratches'"
@@ -52,7 +67,8 @@ alias dotfiles="/usr/bin/git --git-dir=$HOME/.dotfiles/ --work-tree=$HOME"
 alias dotfiles-filter-repo="$HOME/.local/bin/git-filter-repo "  # Adjust the path accordingly
 alias prettyjson='python -m json.tool'
 alias gstash='f() { git stash push -m "$1"; }; f'
-alias makeExec='f() { chmod +x "$1" }; f'                                                                               
+alias makeExec='f() { chmod +x "$1" }; f' 
+alias cp="rsync -ah --progress"                                                                              
  
 # CONFIG FILES DIRECT
 alias zshconfig="micro ~/.zshrc"
@@ -78,7 +94,7 @@ alias tfi="terraform init"
 alias tftest="terraform init; terraform validate"
 
 # AWS
-alias awslogin="_awslogin master; _awslogin dev; _awslogin sit; _awslogin stage; _awslogin prod; _awslogin shared;"
+# alias awslogin="_awslogin master; _awslogin dev; _awslogin sit; _awslogin stage; _awslogin prod; _awslogin shared;"
 alias getsecret="~/scripts/getsecret.sh"
 
 # MISC
@@ -114,7 +130,6 @@ function keycloak-dev () {
 	docker run -p 8081:8080 -e KEYCLOAK_ADMIN=admin -e KEYCLOAK_ADMIN_PASSWORD=admin -v keycloak-vol:/var/lib/docker/volumes/keycloak/_data quay.io/keycloak/keycloak:21.1.1 start-dev
 
 }
-
 
 #### Kubernes
 # Sets current namespace
@@ -377,9 +392,9 @@ function dockerexec () {
     fi
 }
 
-_awslogin () {
-	PYTHONWARNINGS="ignore" aws-adfs login --profile=$@ --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi
-}
+# _awslogin () {
+	# PYTHONWARNINGS="ignore" aws-adfs login --profile=$@ --adfs-host=adfs.wgu.edu --ssl-verification --session-duration 14400 --no-sspi
+# }
 
 easy_ssh () {
 	echo "ssh ${1}@${2}"
@@ -644,36 +659,17 @@ function keycloak() {
 
 
 
-############################
-# Autocorrect "nocorrect" #
-###########################
-alias install="nocorrect template"
-
-########################
-# PowerLevel10k Config #
-########################
-# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
-# Initialization code that may require console input (password prompts, [y/n]
-# confirmations, etc.) must go above this block; everything else may go below.
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-
-####################
-# Oh My ZSH Config #
-####################
 # If you come from bash you might have to change your $PATH.
-# export PATH=$HOME/bin:/usr/local/bin:$PATH
+# export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
-# Path to your oh-my-zsh installation.
+# Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
 
 # Set name of the theme to load --- if set to "random", it will
-# load a random theme each time oh-my-zsh is loaded, in which case,
+# load a random theme each time Oh My Zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-ZSH_THEME="powerlevel10k/powerlevel10k"
+ZSH_THEME="robbyrussell"
 
 # Set list of themes to pick from when loading at random
 # Setting this variable when ZSH_THEME=random will cause zsh to load
@@ -735,10 +731,18 @@ COMPLETION_WAITING_DOTS="true"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-syntax-highlighting zsh-autosuggestions history npm aws terraform)
+plugins=(
+git
+colored-man-pages
+fzf
+history-substring-search
+zsh-autosuggestions
+zsh-syntax-highlighting
+kubectl helm docker aws gh
+aws-timer
+)
 
 source $ZSH/oh-my-zsh.sh
-# source $(dirname $(gem which colorls >/dev/null))/tab_complete.sh
 
 # User configuration
 
@@ -748,25 +752,50 @@ source $ZSH/oh-my-zsh.sh
 # export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
-if [[ -n $SSH_CONNECTION ]]; then
-	export EDITOR='micro'
-else
- 	export EDITOR='micro'
-fi
+# if [[ -n $SSH_CONNECTION ]]; then
+#   export EDITOR='vim'
+# else
+#   export EDITOR='nvim'
+# fi
 
 # Compilation flags
-# export ARCHFLAGS="-arch x86_64"
+# export ARCHFLAGS="-arch $(uname -m)"
 
-# Set personal aliases, overriding those provided by oh-my-zsh libs,
-# plugins, and themes. Aliases can be placed here, though oh-my-zsh
-# users are encouraged to define aliases within the ZSH_CUSTOM folder.
+# Set personal aliases, overriding those provided by Oh My Zsh libs,
+# plugins, and themes. Aliases can be placed here, though Oh My Zsh
+# users are encouraged to define aliases within a top-level file in
+# the $ZSH_CUSTOM folder, with .zsh extension. Examples:
+# - $ZSH_CUSTOM/aliases.zsh
+# - $ZSH_CUSTOM/macos.zsh
 # For a full list of active aliases, run `alias`.
 #
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+# Don’t scan for insecure dirs every launch (if you’ve already fixed perms)
+ZSH_DISABLE_COMPFIX=true
+# Less frequent auto-update checks (or disable and update manually)
+DISABLE_AUTO_UPDATE="true"  # run: omz update
+# Cache completionsC
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+eval "$(direnv hook zsh)"
 
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-fpath=(/Users/charles.crickard/.oh-my-zsh/custom/completions /Users/charles.crickard/.oh-my-zsh/custom/plugins/terraform /Users/charles.crickard/.oh-my-zsh/plugins/aws /Users/charles.crickard/.oh-my-zsh/plugins/npm /Users/charles.crickard/.oh-my-zsh/plugins/history /Users/charles.crickard/.oh-my-zsh/custom/plugins/zsh-autosuggestions /Users/charles.crickard/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting /Users/charles.crickard/.oh-my-zsh/plugins/git /Users/charles.crickard/.oh-my-zsh/functions /Users/charles.crickard/.oh-my-zsh/completions /Users/charles.crickard/.oh-my-zsh/cache/completions /usr/local/share/zsh/site-functions /usr/share/zsh/site-functions /usr/share/zsh/5.9/functions)
+# Huge, deduped history shared across terminals
+HISTFILE=~/.zsh_history
+HISTSIZE=200000
+SAVEHIST=200000
+setopt share_history hist_ignore_all_dups hist_reduce_blanks inc_append_history
 
+# Better word movement and menu-select on arrows
+bindkey -e
+bindkey '^[[1;5C' forward-word   # Ctrl+Right
+bindkey '^[[1;5D' backward-word  # Ctrl+Left
+
+# history-substring-search on Up/Down
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+
+# Kiro CLI post block. Keep at the bottom of this file.
+[[ -f "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.post.zsh" ]] && builtin source "${HOME}/Library/Application Support/kiro-cli/shell/zshrc.post.zsh"
+
+eval "$(/opt/homebrew/bin/brew shellenv)"
