@@ -2,9 +2,8 @@
 [user]
 	name = charles.crickard
 	email = charles.crickard@wgu.edu
-# Please adapt and uncomment the following lines:
-#	name = Charles Crickard
-#	email = charles.crickard@C02C771TMD6T.(none)
+[includeIf "gitdir:~/Desktop/Obsidian/"]
+    path = ~/.gitconfig-personal
 
 [alias]
   co = !git fetch && git checkout

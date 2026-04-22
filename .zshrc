@@ -24,6 +24,10 @@ export PATH="/usr/local/opt/postgresql@15/bin:$PATH"
 
 export PATH="/Users/charles.crickard/Desktop/playground/scripts:$PATH"
 
+## Micro Editor as default
+export EDITOR="micro"
+export VISUAL="micro"
+
 
 
 ### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
